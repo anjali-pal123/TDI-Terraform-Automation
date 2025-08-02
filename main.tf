@@ -2,6 +2,16 @@ provider "aws" {
   region = var.aws_region
 }
 
+resource "aws_subnet" "main_subnet" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "172.16.1.0/24"
+  availability_zone       = "ap-south-1a"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "main-subnet"
+  }
+}
+
 resource "aws_vpc" "main" {
   cidr_block = "172.16.0.0/16"
   instance_tenancy = "default"
@@ -10,11 +20,40 @@ resource "aws_vpc" "main" {
   }
 }
 
+/* new changes */
+# Create Internet Gateway
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+  tags = {
+    Name = "main-igw"
+  }
+}
+
+# Create a Route Table
+resource "aws_route_table" "main_route" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+  tags = {
+    Name = "main-route"
+  }
+}
+
+# Associate the route table with the subnet
+resource "aws_route_table_association" "a" {
+  subnet_id      = aws_subnet.main_subnet.id
+  route_table_id = aws_route_table.main_route.id
+}
+
+/* New Changes */
+
 #Create security group with firewall rules
 resource "aws_security_group" "my_sg" {
   name        = "my-security-group"
   description = "Allow SSH"
-  vpc_id      = "vpc-0ab51b1e8e9f80751"
+  vpc_id = aws_vpc.main.id
 
   ingress {
     from_port   = 8080
@@ -44,14 +83,18 @@ resource "aws_security_group" "my_sg" {
 }
 
 resource "aws_instance" "myFirstInstance" {
-  ami           = var.ami_id
-  key_name = var.key_name
-  instance_type = var.instance_type
-  vpc_security_group_ids = [aws_security_group.my_sg.id]
-  tags= {
+  ami                         = var.ami_id
+  key_name                    = var.key_name
+  instance_type               = var.instance_type
+  vpc_security_group_ids      = [aws_security_group.my_sg.id]
+  subnet_id                   = aws_subnet.main_subnet.id
+  associate_public_ip_address = true
+
+  tags = {
     Name = var.tag_name
   }
 }
+
 
 # Create Elastic IP address
 resource "aws_eip" "myFirstInstance" {
@@ -61,3 +104,4 @@ tags= {
     Name = "my_elastic_ip"
   }
 }
+   
